@@ -1,0 +1,554 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Module>
+	<ModulePrefs title="GiQ mPlayer" summary="An XSPF-based media player"
+		author="Arjun Asthana" author_email="argent.moondragon@gmail.com"
+		thumbnail="http://i69.photobucket.com/albums/i61/argentmd/logo1.png"
+		description="Like music? Put it on your profile using a XSPF playlist!"
+		screenshot="http://i69.photobucket.com/albums/i61/argentmd/logo.png"
+		icon="http://i69.photobucket.com/albums/i61/argentmd/g.png" >
+		<Require feature="opensocial-0.7" />
+		<Require feature="dynamic-height" />
+		<Require feature="settitle" />
+		<Require feature="views" />
+		<Require feature="skins" />
+	</ModulePrefs>
+	<Content type="html" view="preview"><![CDATA[
+	<p>A simple JavaScript based media player that uses an XSPF playlist. Does not require flash, uses the browser's inbuilt ability to play songs (eg. Windows Media Player, QuickTime, MozPlugger and other embeds). Totally configurable.</p>
+
+	<p>Features:<ul>
+		<li>Ability to use your own music/songs/sounds/anything else</li>
+		<li>Cover art support</li>
+		<li>Fully configurable</li>
+		<li>Almost all formats supported, only limited by your media plugin</li>
+		<li>Fully XSPF-compliant, all tags (except track-&gt;info) supported</li>
+		</ul></p>
+
+	<p>Note: This requires an XSPF based playlist. For more information, see <a href="http://www.xspf.org/quickstart/">XSPF QuickStart Guide</a>. Last.FM's XSPF playlists do not have a &lt;location&gt; tag, so ensure you put it in before using the playlist.</p>
+	]]></Content>
+	<Content type="html"><![CDATA[
+		<style type="text/css">
+			input {
+				font: 11px Verdana, Geneva, Arial, Helvetica, sans-serif;
+				background-color: #D7E5F2;
+				color: #102132;
+				border: 1px solid #284279;
+				}
+			
+			input#clickity {
+				font: 11px Verdana, Geneva, Arial, Helvetica, sans-serif;
+				background-color: #93a1c0;
+				color: #546576;
+				border: 1px solid #284279;
+				}
+			
+			div#config {
+				font: 11px Verdana, Geneva, Arial, Helvetica, sans-serif;
+				position: fixed;
+				float: right;
+				right: 0px;
+				display: none;
+				background-color: #93a1c0;
+				border: 1px solid #284279;
+				}
+				
+			a#header {
+				text-decoration: none;
+				}
+
+			a#header:hover {
+				text-decoration: none;
+				background: url(http://img3.freeimagehosting.net/uploads/e14ff8115d.gif);
+				}
+		</style>
+		<script type="text/javascript" >
+			// (c) 2008 Arjun Asthana
+			// CreativeCommons-ShareAlike-Attribution-NonCommercial 2.5
+                        // Thanks to David Sklar for BadgerFish XML to JSON convertor
+			// Huge thanks to irc://irc.freenode.net/##javascript for help
+			// Icons and images from various sources on the internet (not mine)
+			// You might want to :set ts=3 or increase the width of your editor
+			
+			// Configurable values
+			//////////////////////
+			var autoPlay; // only for containers that allow it, else assume "false"
+			var playlistURL;
+			var defaultCover;
+			var iNext;
+			var iStop;
+			var iPrev;
+			var bg;
+			var bg1;
+			var bg2;
+			var bgP;
+			var cArtist;
+			var cAlbum;
+			var cTitle;
+			var chTitle;
+			var chOwner;
+			
+			var oNext = "http://img3.freeimagehosting.net/uploads/db0f03036d.png";
+			var oStop = "http://img3.freeimagehosting.net/uploads/2af5440a50.png";
+			var oPrev = "http://img3.freeimagehosting.net/uploads/d2b82c8246.png";
+			
+			var nPrev = "http://i69.photobucket.com/albums/i61/argentmd/Previous.png";
+			var nStop = "http://i69.photobucket.com/albums/i61/argentmd/Stop.png";
+			var nNext = "http://i69.photobucket.com/albums/i61/argentmd/Next.png";
+			
+			// Initialiser
+			//////////////
+			function initPlayer() {
+				initPlaylist();
+				createControls();
+				}
+
+			function createControls() {
+				document.getElementById("cPrev").src = iPrev;
+				document.getElementById("cNext").src = iNext;
+				document.getElementById("cStop").src = iStop;
+				}
+
+			// Rotate pretty colours (or dark, dull ones)
+			/////////////////////////////////////////////
+			var timeout;
+			var rotObj = null;
+			
+			function stopRotate ( ) {
+				if ( timeout == null ) return false;
+				clearTimeout( timeout );
+				if ( rotObj.className == "tr_one" ) rotObj.style.backgroundColor = bg1;
+				else rotObj.style.backgroundColor = bg2;
+				rotObj = null;
+				timeout = null;
+				}
+			
+			function nextColor ( t, i ) {
+				var temp;
+				if ( (Math.floor(i/10))%2 == 0 ) temp = i%10;
+				else temp = 10 - (i%10);
+				t.style.backgroundColor = "#" + ( 0x111*temp ).toString(16);
+				timeout = setTimeout( function() { nextColor( t, i + 1 );}, 100 );
+				}
+			
+			function startRotate ( ti ) {
+				rotObj = ti;
+				timeout = setTimeout( function() { nextColor( ti, 0 );}, 100 );
+				}
+			
+			// Rotate pretty colours (while playing)
+			// Hardcoding because I need them independant
+			// No, I do not want them to be implemented as an array of timeouts
+			// and rotObjs to support infinite processes. I did try, though. ;_;
+			///////////////////////////////////////////////////////
+			var pTimeout;
+			var pRotObj;
+			
+			function pStopRotate ( ) {
+				if ( pTimeout == null ) return false;
+				clearTimeout( pTimeout );
+				if ( pRotObj.className == "tr_one" ) pRotObj.style.backgroundColor = bg1;
+				else pRotObj.style.backgroundColor = bg2;
+				pRotObj = null;
+				pTimeout = null;
+				}
+			
+			function pNextColor ( t, i ) {
+				var temp;
+				if ( (Math.floor(i/8))%2 == 0 ) temp = i%8;
+				else temp = 8 - (i%8);
+				t.style.backgroundColor = "#" + ( parseInt( bgP.substr(1), 16 ) + 0x111111*temp ).toString(16);
+				pTimeout = setTimeout( function() { pNextColor( t, i + 1 );}, 100 );
+				}
+			
+			function pStartRotate ( ti ) {
+				pRotObj = ti;
+				pTimeout = setTimeout( function() { pNextColor( ti, 0 );}, 100 );
+				}
+			
+			// Playlist Handlers
+			/////////////////////
+			var plData;
+			var playd;
+			var plLen;
+			var xmlInt;
+			var xml;
+			
+			function initPlaylist() {
+				playd = document.getElementById("xmlplaylist");
+				getPlaylist();
+				}
+			
+			function getPlaylist() {
+				var params = {};
+				params[gadgets.io.RequestParameters.CONTENT_TYPE] = gadgets.io.ContentType.DOM;
+				gadgets.io.makeRequest( playlistURL, doPlaylist, params );
+				}
+			
+//			function getPlaylist() {
+//				var params = {};  
+//				params[gadgets.io.RequestParameters.CONTENT_TYPE] = gadgets.io.ContentType.TEXT;  
+//				var url =  "http://badgerfish.ning.com/xml2json.php?url=" + playlistURL;  
+//				gadgets.io.makeRequest( url, doPlaylist, params );
+//				}
+			
+			function doPlaylist( data ) {
+				plData = data;
+				createHeader();
+				processPlaylist();
+				gadgets.window.adjustHeight();
+				if ( autoPlay == "true" )
+					startPlay( document.getElementById( "song0" ) );
+				}
+			
+			function createHeader() {
+				var header = document.getElementById( "header" )
+				var title = null;
+				var owner = null;
+				var info = null;
+				try { var title = plData.data.getElementsByTagName("playlist").item(0).getElementsByTagName("title").item(0).textContent; }
+					catch( obj ) { }
+				try { var owner = plData.data.getElementsByTagName("playlist").item(0).getElementsByTagName("creator").item(0).textContent; }
+					catch( obj ) { }
+				try { var info = plData.data.getElementsByTagName("playlist").item(0).getElementsByTagName("info").item(0).textContent; }
+					catch( obj ) { }
+				header.href = info;
+				// Meh, I'm too lazy to createElements and appendChildren
+				// Moreover, innerHTML never killed anybody....
+				header.innerHTML = '<span style="color: ' + chTitle + '; font: 700 24px courier,monospace;">'
+							+ title + '<br /><span style="font-size: 20px;'
+							+ 'color: '+ chOwner + '">' + owner + '</span></span>';
+				// Give this another try
+				if ( title != null ) gadgets.window.setTitle( title + owner ? ( " [ " + owner + " ]" ) : "" );
+				}
+			
+			function processPlaylist() {
+				var i = 0;
+				plLen = plData.data.getElementsByTagName("playlist").item(0).getElementsByTagName("track").length;
+				for ( ; i < plLen; i++ ) {
+					var a = plData.data.getElementsByTagName("playlist").item(0).getElementsByTagName("track").item(i);
+					appendSong(	i,
+							a.getElementsByTagName("location").item(0).textContent,
+							( a.getElementsByTagName("creator").item(0) ? a.getElementsByTagName("creator").item(0).textContent : null ),
+							( a.getElementsByTagName("album").item(0) ? a.getElementsByTagName("album").item(0).textContent : null ),
+							( a.getElementsByTagName("title").item(0) ? a.getElementsByTagName("title").item(0).textContent : null ),
+							( a.getElementsByTagName("image").item(0) ? a.getElementsByTagName("image").item(0).textContent : null ),
+							( a.getElementsByTagName("annotation").item(0) ? a.getElementsByTagName("annotation").item(0).textContent : null )
+							);
+					}
+				}
+			
+			function appendSong( id, url, artist, album, title, cover, annotation ) {
+				var cs = document.createElement( "div" );
+				cs.style.display = "block";
+				cs.style.clear = "both";
+				cs.style.borderColor = "grey";
+				cs.style.borderStyle = "solid";
+				cs.style.borderWidth = "2px";
+				cs.style.color = "white";
+				cs.style.height = "106px";
+				// Fixme: make the width minimum possible without wrap (wrap if neccessary)
+				// cs.style.width = "-1";
+				// cs.style.right = "auto";
+				cs.style.fontFamily = "sans-serif";
+				cs.style.backgroundColor = ( ( id % 2 ) ? bg1 : bg2 );
+				if ( annotation ) cs.title = annotation;
+				cs.id = "song" + id;
+				cs.className = "tr_" + ( ( id % 2 ) ? "one" : "two" );
+				cs.onmouseover = function() { startRotate(cs) };
+				cs.onmouseout = function() { stopRotate(cs); };
+				cs.onclick = function() { startPlay(cs); return false; };
+				cs.innerHTML = '<img src="' + ( cover ? cover : defaultCover )
+						+ '" style="width: 96px; height: 96px; float: left; clear: none; display: block; '
+						+ 'margin: 5px;" /><span style="font-size: 16px; right: auto; width: auto;">'
+						+ '<span style="color: ' + cTitle + '">' + ( title ? title : 'No title' ) + "</span>"
+						+ '<span style="color: ' + cAlbum + '">' + ( album ? '<br />' + album : '' ) + "</span>"
+						+ '<span style="color: ' + cArtist + '">' + ( artist ? '<br />' + artist : '' ) + "</span>"
+						+ '</span>'  + '<a style="display: none;" id="asong' + id + '" ' + 'href="' + url + '" />';
+				playd.appendChild( cs );
+				// playd.appendChild( document.createElement("br") );
+				}
+
+			// Song handlers
+			/////////////////
+			var pID = null;
+
+			function addPlayer( location ) {
+				var pl = document.getElementById( "playing" );
+				while ( pl.firstChild ) pl.removeChild( pl.firstChild );
+				// Does not work
+				// var player = document.createElement( "object" );
+				// var pAutoplay = document.createElement( "param" );
+				// var pData = document.createElement( "param" );
+				// pAutoplay.name = "autoplay";
+				// pAutoplay.value = "on";
+				// pData.name = "data";
+				// pData.value = location;
+				// player.appendChild( pAutoplay );
+				// player.appendChild( pData );
+				
+				// Autoplay broken
+				// var player = document.createElement( "embed" );
+				// player.autoPlay = "true";
+				// player.src = location;
+				// player.id = "player";
+				// player.style.width = "auto";
+				// player.style.height = "64px";
+				// pl.appendChild( player );
+				
+				// Fixme: Find a method better than innerHTML to insert media with autoPlay
+				pl.innerHTML = '<object style="width:auto; height: 64px;">'
+						+ '<param name="src" value="' + location + '">'
+						+ '<param name="autoplay" value="true">'
+						+ '<param name="controller" value="true">'
+						+ '<param name="loop" value="true">'
+						+ '<embed id="player" autoplay="true" style="width: auto; '
+						+ 'height: 64px;" loop="true" src="' + location + '"></embed>'
+						+ '</object>'
+				}
+			
+			function removePlayer() {
+				var pl = document.getElementById( "playing" );
+				while ( pl.firstChild ) pl.removeChild( pl.firstChild );
+				}
+
+			function startPlay( obj ) {
+				stopPlay();
+				stopRotate();
+				pStartRotate( obj );
+				pID = obj.id;
+				obj.onmouseover = null;
+				obj.onmouseout = null;
+				obj.onclick = null;
+				addPlayer( document.getElementById( "a" + obj.id ).href );
+				}
+
+			function stopPlay() {
+				if ( pID == null ) return false;
+				var playingElt = document.getElementById( pID );
+				pStopRotate();
+				playingElt.onmouseover = eval( 'function() { startRotate( document.getElementById( "' + pID + '" ) ); };' );
+				playingElt.onmouseout = eval( 'function() { stopRotate( document.getElementById( "' + pID + '" ) ); };' );
+				playingElt.onclick = eval( 'function() { startPlay( document.getElementById( "' + pID + '" ) ); };' );
+				removePlayer();
+				pID = null;
+				}
+				
+			function playNext() {
+				if ( pID == ( "song" + plLen ) || pID == null ) 
+					startPlay( document.getElementById( "song0" ) );
+				startPlay( document.getElementById( "song" + (parseInt(pID.substr(4)) + 1 ) ) );
+				}
+			
+			function playPrev() {
+				if ( pID == "song0" || pID == null  )
+					startPlay( document.getElementById( "song" + ( plLen - 1 ) ) );
+				startPlay( document.getElementById( "song" + (parseInt(pID.substr(4)) - 1 ) ) );
+				}
+			
+			// Now comes the OS specific stuff...
+			/////////////////////////////////////
+			function getData() {
+				document.body.style.backgroundColor = gadgets.skins.getProperty( gadgets.skins.Property.BG_COLOR );
+				var req = opensocial.newDataRequest();
+				var fields = [ "autoPlay", "playlistURL", "defaultCover", "iNext", "iStop", "iPrev", "bg",
+						"bg1", "bg2", "bgP", "cArtist", "cAlbum", "cTitle", "chTitle", "chOwner" ];
+				req.add( req.newFetchPersonRequest( opensocial.DataRequest.PersonId.OWNER ), "owner" );
+				req.add( req.newFetchPersonRequest( opensocial.DataRequest.PersonId.VIEWER ), "viewer" );
+				req.add( req.newFetchPersonAppDataRequest( "OWNER", fields ), "owner_data" );
+				req.send( handleData );
+				}
+			
+			function handleData( data ) {
+				var oD = data.get( "owner" ).getData();
+				var oID = oD.getId();
+				// var vID = data.get( "viewer" ).getData().getId();
+				var cData = data.get( "owner_data" ).getData()[ oID ];
+				if ( oD.isViewer() ) {
+						try {
+							if ( gadgets.views.getCurrentView().getName() != "profile" ) {
+								document.getElementById("configuration").style.display = "block";
+								document.getElementById("config").innerHTML = "Hide configuration";
+							} else {
+								document.getElementById("configuration").style.display = "none";
+								document.getElementById("config").innerHTML = "Show configuration";
+								}
+						} catch ( obj ) { // gadgets.views not supported, show configuration
+							document.getElementById("configuration").style.display = "block";
+							document.getElementById("config").innerHTML = "Hide configuration";
+							}
+					// Show "Hide/Show config" button no matter what
+					document.getElementById("config").style.display = "inline";
+					document.getElementById("config").style.float = "right";
+					}
+				if ( data.get( "owner_data" ).hadError() || ! cData ) {
+					// Heh, have to remove the empty image tags anyway...
+					document.getElementById( "controls" ).style.display = "none";
+					( oD.isViewer() ) ? document.getElementById( "xmlplaylist" ).innerHTML = "Error retrieving data" : void(0);
+					return;
+					}
+				try {
+					autoPlay = cData[ "autoPlay" ];
+					playlistURL = cData[ "playlistURL" ];
+					defaultCover = cData[ "defaultCover" ];
+					iNext = cData[ "iNext" ];
+					iStop = cData[ "iStop" ];
+					iPrev = cData[ "iPrev" ];
+					bg = cData[ "bg" ];
+					bg1 = cData[ "bg1" ];
+					bg2 = cData[ "bg2" ];
+					bgP = cData[ "bgP" ];
+					cArtist = cData[ "cArtist" ];
+					cAlbum = cData[ "cAlbum" ];
+					cTitle = cData[ "cTitle" ];
+					chTitle = cData[ "chTitle" ];
+					chOwner = cData[ "chOwner" ];
+					( iNext == oNext ) ? iNext = nNext : void(0);
+					( iStop == oStop ) ? iStop = nStop : void(0);
+					( iPrev == oPrev ) ? iPrev = nPrev : void(0);
+				} catch ( obj ) {
+					document.getElementById( "controls" ).style.display = "none";
+					( oD.isViewer() ) ? document.getElementById( "xmlplaylist" ).innerHTML = "Error retrieving data" : void(0);
+					return;
+					}
+				document.getElementById( "controls" ).style.display = "inline";
+				if ( oD.isViewer() ) {
+					function setVal ( ID, value ) { document.getElementById( ID ).value = value ; }
+					// Metaprogramming ftw!
+					setVal( "vURL", playlistURL )
+					setVal( "vCover", defaultCover )
+					setVal( "vNext", iNext )
+					setVal( "vStop", iStop )
+					setVal( "vPrev", iPrev )
+					setVal( "vBG1", bg1 )
+					setVal( "vBG2", bg2 )
+					setVal( "vBGP", bgP )
+					setVal( "vCArtist", cArtist )
+					setVal( "vCAlbum", cAlbum )
+					setVal( "vCTitle", cTitle )
+					setVal( "vChTitle", chTitle )
+					setVal( "vChOwner", chOwner )
+					}
+				initPlayer();
+				}
+				
+			gadgets.util.registerOnLoadHandler( getData );
+
+			// Some stuff I need for the configuration thingy
+			////////////////////////////////////////////////
+			function checkColor( object ) {
+				var i = parseInt( object.value.substr(1), 16 );
+				if ( object.value.length != 7 || object.value.charAt(0) != '#' || isNaN( i ) || i < 0 || i > 0xffffff ) {
+					alert( object.value + " is not a valid color. Valid example: #777777" );
+					// object.value = "#777777";
+					return false;
+					}
+				return true;
+				}
+			
+			function saveConfig( object ) {
+				// Not verifying the form because:
+				// 1) No way to verify the images
+				// 2) If they can get past checkColor(), they can get past verifyFoo()
+				object.value = "Saving configuration...";
+				object.style.backgroundColor = "#345678";
+				object.style.color = "#fedcba";
+				var req = opensocial.newDataRequest();
+				// Assume that it is safe to save this to VIEWER
+				// as the configuration is shown only if OWNER=VIEWER
+				function setVal( obj, str, id ) {
+					obj.add( req.newUpdatePersonAppDataRequest( "VIEWER",
+						str, document.getElementById( id ).value ) );
+					}
+				setVal( req, "playlistURL", "vURL" );
+				setVal( req, "defaultCover", "vCover" );
+				setVal( req, "iNext", "vNext" );
+				setVal( req, "iStop", "vStop" );
+				setVal( req, "iPrev", "vPrev" );
+				setVal( req, "bg1", "vBG1" );
+				setVal( req, "bg2", "vBG2" );
+				setVal( req, "bgP", "vBGP" );
+				setVal( req, "cArtist", "vCArtist" );
+				setVal( req, "cAlbum", "vCAlbum" );
+				setVal( req, "cTitle", "vCTitle" );
+				setVal( req, "chTitle", "vChTitle" );
+				setVal( req, "chOwner", "vChOwner" );
+				req.send( checkSave );
+				}
+			
+			function checkSave( data ) {
+				var object = document.getElementById( "clickity" );
+				if ( data.hadError() ) {
+					alert( "Could not save data" );
+					object.value = "Saving configuration failed";
+					object.style.backgroundColor = "#ff0000";
+					object.style.color = "#000000";
+				} else {
+					object.disabled = "disabled"
+					object.value = "Saving configuration succeeded";
+					object.style.backgroundColor = "#00ff00";
+					object.style.color = "#0000ff";
+					}
+				document.getElementById( "controls" ).display = "block";
+				document.getElementById( "xmlplaylist" ).innerHTML = "";
+				getData();
+				}
+			
+			function showHideConfig() {
+				var object = document.getElementById("configuration");
+				var cObject = document.getElementById("config");
+				if ( object.style.display == "none" ) {
+					object.style.display = "block";
+					cObject.innerHTML = "Hide Configuration";
+				} else {
+					object.style.display = "none";
+					cObject.innerHTML = "Show Configuration";
+					}
+				}
+				
+		</script>
+		<div id="config" onclick="showHideConfig();">Hide Configuration</div>
+		<div id="configuration" style="display: none;">
+			<span style="font-size: 36px; text-decoration: underline;">Configuration</span><br></br>
+			<div id="cURL">Playlist URL (<a href="http://www.xspf.org/quickstart/">XSPF</a>): <input type="text" id="vURL" style="width: auto;"></input></div>
+			<div id="cCover">URL to the default cover, when a song has no image 
+				<input type="text" id="vCover" style="width: auto" value="http://i69.photobucket.com/albums/i61/argentmd/defualt.gif">
+				</input></div>
+			<div id="cControls">Buttons:
+				<ul>
+					<li>Previous <input type="text" id="vPrev" style="width: auto;" value="http://i69.photobucket.com/albums/i61/argentmd/Previous.png"></input></li>
+					<li>Stop <input type="text" id="vStop" style="width: auto;" value="http://i69.photobucket.com/albums/i61/argentmd/Stop.png"></input></li>
+					<li>Next <input type="text" id="vNext" style="width: auto;" value="http://i69.photobucket.com/albums/i61/argentmd/Next.png"></input></li>
+				</ul>
+			</div>
+			<div id="cBG">Playlist backgrounds:
+				<ul>
+					<li>Background#1 <input type="text" id="vBG1" style="width: auto;" onchange="checkColor(this)" value="#394062"></input></li>
+					<li>Background#2 <input type="text" id="vBG2" style="width: auto;" onchange="checkColor(this)" value="#202020"></input></li>
+					<li>Playing bkg  <input type="text" id="vBGP" style="width: auto;" onchange="checkColor(this)" value="#113300"></input></li>
+				</ul>
+			</div>
+			<div id="cColors">Text Colors:
+				<ul>
+					<li>Artists' names <input type="text" id="vCArtist" style="width: auto;" onchange="checkColor(this)" value="#ffaaaa"></input></li>
+					<li>Album names <input type="text" id="vCAlbum" style="width: auto;" onchange="checkColor(this)" value="#aaffaa"></input></li>
+					<li>Titles <input type="text" id="vCTitle" style="width: auto;" onchange="checkColor(this)" value="#aaaaff"></input></li>
+					<li>Playlist title <input type="text" id="vChTitle" style="width: auto;" onchange="checkColor(this)" value="#660000"></input></li>
+					<li>Playlist owner name <input type="text" id="vChOwner" style="width: auto;" onchange="checkColor(this)" value="#006600"></input></li>
+				</ul>
+			</div>
+			<input type="button" id="clickity" value="Save Configuration" onclick="saveConfig(this)"></input>
+		</div>
+		<div>
+			<div style="float: left;" >
+				<a id="header" style="display: inline; text-decoration: none; "></a><br />
+				<div id="playing" style="display: inline; width: 256; height: 64;"></div>
+				</div>
+			<div id="controls" style="float: right; right: 0px;">
+				<img id="cPrev" onclick="playPrev();"></img>
+				<img id="cStop" onclick="stopPlay();"></img>
+				<img id="cNext" onclick="playNext();"></img>
+				</div>
+			</div>
+		<div id="xmlplaylist" style="display: block;"></div>
+	]]></Content>
+</Module>
+
